@@ -1,31 +1,75 @@
 import requests
-# twilio Recovery code: L6X6KRB9APDGVH7REDZ5YR2W
-end_point = f"https://api.openweathermap.org/data/2.5/forecast"
-api_key = "0322654e5c730c4d73d2c777d61917f1"
-location = {
-    "lon": 38.081408,
-    "lat": 55.624584,
-    "appid": api_key,
-    "cnt": 4
-}
-# ?lat={lat}&lon={lon}&appid={API key}
-response = requests.get(end_point, params=location)
-data = response.json()
-weather_id = []
+from typing import Dict, List, Optional
+import os
+from dotenv import load_dotenv
+
+# Load environment variables (secure API key handling)
+load_dotenv()
+
+class WeatherForecast:
+    """
+    A class to fetch and analyze weather forecast data from OpenWeatherMap API.
+    Checks if rain/snow is expected in the next 12 hours (4 intervals of 3-hour forecasts).
+    """
+
+    BASE_URL = "https://api.openweathermap.org/data/2.5/forecast"
+
+    def __init__(self, api_key: str, latitude: float, longitude: float):
+        self.api_key = api_key
+        self.latitude = latitude
+        self.longitude = longitude
+
+    def _fetch_forecast(self) -> Optional[Dict]:
+        """Fetch weather forecast data from OpenWeatherMap API."""
+        params = {
+            "lat": self.latitude,
+            "lon": self.longitude,
+            "appid": self.api_key,
+            "cnt": 4  # Fetch next 12 hours (4x 3-hour intervals)
+        }
+
+        try:
+            response = requests.get(self.BASE_URL, params=params)
+            response.raise_for_status()  # Raise HTTP errors if any
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching weather data: {e}")
+            return None
+
+    def _will_it_rain_or_snow(self, weather_data: Dict) -> bool:
+        """
+        Check if rain/snow is expected in the forecast.
+        Weather IDs < 700 indicate precipitation (rain, snow, etc.).
+        """
+        forecasts = weather_data.get("list", [])
+        weather_ids = [
+            forecast["weather"][0]["id"]
+            for forecast in forecasts
+            if forecast.get("weather")
+        ]
+        return any(weather_id < 700 for weather_id in weather_ids)
+
+    def check_umbrella_needed(self) -> None:
+        """Check if an umbrella is needed based on the forecast."""
+        weather_data = self._fetch_forecast()
+        if not weather_data:
+            print("Failed to fetch weather data.")
+            return
+
+        if self._will_it_rain_or_snow(weather_data):
+            print("Bring an umbrella! Rain or snow expected in the next 12 hours.")
+        else:
+            print("No umbrella needed. Clear skies ahead!")
 
 
-weather0 = data["list"][0]["weather"][0]["id"]
-weather1 = data["list"][1]["weather"][0]["id"]
-weather2 = data["list"][2]["weather"][0]["id"]
-weather3 = data["list"][3]["weather"][0]["id"]
-if weather0 or weather1 or weather2 or weather3 < 700:
-    print("bring an umbrella")
-
-weather_id.append(weather0)
-weather_id.append(weather1)
-weather_id.append(weather2)
-weather_id.append(weather3)
-
-print(weather_id)
-
-
+if __name__ == "__main__":
+    # Load API key from environment variables (secure)
+    API_KEY = os.getenv("OPENWEATHER_API_KEY") or "your_api_key_here"
+    
+    # Example: Moscow coordinates
+    weather = WeatherForecast(
+        api_key=API_KEY,
+        latitude=55.7558,
+        longitude=37.6173
+    )
+    weather.check_umbrella_needed()
